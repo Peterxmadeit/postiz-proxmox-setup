@@ -7,18 +7,18 @@ trap 'echo -e "\n\033[1;31m❌ Error on line $LINENO. Exiting!\033[0m"; exit 1' 
 # Import community helper functions
 source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
 
-# Use the exact variable names required by build.func
-CTID="${1:-}"
-HOSTNAME="${2:-}"
-APP="Postiz"
-DISK="12"
-CPU="2"
-RAM="4096"
-OS="ubuntu"
-VERSION="24.04"
-UNPRIVILEGED="1"
-NET="name=eth0,bridge=vmbr0,ip=dhcp"
-TAGS="postiz;scheduler"
+# Assign and export variables so build.func can access them
+export CTID="${1:-}"
+export HOSTNAME="${2:-}"
+export APP="Postiz"
+export DISK="12"
+export CPU="2"
+export RAM="4096"
+export OS="ubuntu"
+export VERSION="24.04"
+export UNPRIVILEGED="1"
+export NET="name=eth0,bridge=vmbr0,ip=dhcp"
+export TAGS="postiz;scheduler"
 
 # Validate usage
 if [[ -z "$CTID" || -z "$HOSTNAME" ]]; then
@@ -26,7 +26,7 @@ if [[ -z "$CTID" || -z "$HOSTNAME" ]]; then
   exit 1
 fi
 
-# Create the LXC container with community helpers
+# Build container using community helpers
 build_container
 
 # Install Docker & Postiz stack
