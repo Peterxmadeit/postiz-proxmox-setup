@@ -4,8 +4,6 @@ trap 'echo -e "\n\033[1;31m❌ Error on line $LINENO. Exiting!\033[0m"; exit 1' 
 
 CTID="${1:-}"
 HOSTNAME="${2:-}"
-
-# Colors
 GREEN="\033[1;32m"
 YELLOW="\033[1;33m"
 RED="\033[1;31m"
@@ -16,16 +14,15 @@ if [[ -z "$CTID" || -z "$HOSTNAME" ]]; then
   exit 1
 fi
 
-echo -e "${YELLOW}🔍 Checking for Ubuntu template...${RESET}"
-TEMPLATE="local:vztmpl/ubuntu-24.04-standard_24.04-1_amd64.tar.zst"
-if ! pveam list local | grep -q "ubuntu-24.04"; then
-  echo -e "${YELLOW}📦 Downloading Ubuntu 24.04 LXC template...${RESET}"
+echo -e "${YELLOW}🔍 Checking Ubuntu 24.04 template...${RESET}"
+if ! pveam list local | grep -q "ubuntu-24.04-standard_"; then
+  echo -e "${YELLOW}📦 Downloading Ubuntu 24.04 template...${RESET}"
   pveam update
   pveam download local ubuntu-24.04-standard_24.04-1_amd64.tar.zst
 fi
 
 echo -e "${YELLOW}🛠️ Creating LXC container $CTID ($HOSTNAME)...${RESET}"
-pct create "$CTID" "$TEMPLATE" \
+pct create "$CTID" "local:vztmpl/ubuntu-24.04-standard_24.04-1_amd64.tar.zst" \
   --hostname "$HOSTNAME" \
   --net0 name=eth0,bridge=vmbr0,ip=dhcp \
   --cores 2 --memory 4096 --rootfs local-lvm:12 \
@@ -34,19 +31,19 @@ pct create "$CTID" "$TEMPLATE" \
 pct start "$CTID"
 
 echo -e "${YELLOW}📦 Installing Docker & Docker Compose inside LXC...${RESET}"
-pct exec "$CTID" -- bash -c "apt update && apt install -y ca-certificates curl gnupg lsb-release"
-pct exec "$CTID" -- bash -c "mkdir -p /etc/apt/keyrings && \
+pct exec "$CTID" -- bash -lc "apt update && apt install -y ca-certificates curl gnupg lsb-release"
+pct exec "$CTID" -- bash -lc "mkdir -p /etc/apt/keyrings && \
   curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg"
-pct exec "$CTID" -- bash -c "echo \
+pct exec "$CTID" -- bash -lc "echo \
   \"deb [arch=\$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
   https://download.docker.com/linux/ubuntu \$(. /etc/os-release && echo \$UBUNTU_CODENAME) stable\" \
   | tee /etc/apt/sources.list.d/docker.list > /dev/null"
-pct exec "$CTID" -- bash -c "apt update && apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin"
-pct exec "$CTID" -- bash -c "systemctl enable docker --now"
+pct exec "$CTID" -- bash -lc "apt update && apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin"
+pct exec "$CTID" -- bash -lc "systemctl enable docker --now"
 
 echo -e "${YELLOW}🚀 Deploying Postiz stack via Docker Compose...${RESET}"
-pct exec "$CTID" -- bash -c "
-mkdir -p /root/postiz && cd /root/postiz
+pct exec "$CTID" -- bash -lc "
+cd /root && mkdir -p postiz && cd postiz
 cat > docker-compose.yml << 'EOF'
 version: '3.8'
 services:
@@ -125,7 +122,6 @@ EOF
 docker compose up -d
 "
 
-# Final message with actual IP
 LXC_IP=$(pct exec "$CTID" -- hostname -I | awk '{print $1}')
 echo -e "\n${GREEN}🎉✅ Postiz has been deployed in LXC container $CTID ($HOSTNAME).${RESET}"
 echo -e "${GREEN}🔗 Access it at: http://$LXC_IP:5000${RESET}"
