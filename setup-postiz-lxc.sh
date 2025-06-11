@@ -1,38 +1,43 @@
-#!/bin/bash
-# Usage: ./setup-postiz-lxc.sh <CTID> <HOSTNAME>
-# Example: ./setup-postiz-lxc.sh 105 postiz
+#!/usr/bin/env bash
+set -Eeo pipefail
 
-CTID="$1"
-HOSTNAME="$2"
-TEMPLATE="local:vztmpl/ubuntu-24.04-standard_24.04-1_amd64.tar.zst"
+CTID="${1:-}"
+HOSTNAME="${2:-}"
 
-if [ -z "$CTID" ] || [ -z "$HOSTNAME" ]; then
-  echo "Usage: $0 <CTID> <HOSTNAME>"
+# Simple colors
+GREEN="\033[1;32m"
+YELLOW="\033[1;33m"
+RED="\033[1;31m"
+RESET="\033[0m"
+
+if [[ -z "$CTID" || -z "$HOSTNAME" ]]; then
+  echo -e "${RED}Usage: $0 <CTID> <HOSTNAME>${RESET}"
   exit 1
 fi
 
-# 1. Create LXC container
-pct create $CTID $TEMPLATE \
-  --hostname $HOSTNAME \
+echo -e "${YELLOW}🛠️  Creating LXC container $CTID ($HOSTNAME)...${RESET}"
+pct create "$CTID" local:vztmpl/ubuntu-24.04-standard_*.tar.zst \
+  --hostname "$HOSTNAME" \
   --net0 name=eth0,bridge=vmbr0,ip=dhcp \
-  --cores 2 --memory 4096 --disk 12 \
+  --cores 2 --memory 4096 --rootfs local-lvm:12 \
   --unprivileged 1
 
-pct start $CTID
+pct start "$CTID"
 
-# 2. Install Docker & Docker Compose
-pct exec $CTID -- bash -lc "apt update && apt install -y ca-certificates curl gnupg lsb-release"
-pct exec $CTID -- bash -lc "mkdir -p /etc/apt/keyrings && \
+echo -e "${YELLOW}📦 Installing Docker & Docker Compose...${RESET}"
+pct exec "$CTID" -- bash -lc "apt update && apt install -y ca-certificates curl gnupg lsb-release"
+pct exec "$CTID" -- bash -lc "mkdir -p /etc/apt/keyrings && \
   curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg"
-pct exec $CTID -- bash -lc "echo \
+pct exec "$CTID" -- bash -lc "echo \
   \"deb [arch=\$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
   https://download.docker.com/linux/ubuntu \$(. /etc/os-release && echo \$UBUNTU_CODENAME) stable\" \
   | tee /etc/apt/sources.list.d/docker.list > /dev/null"
-pct exec $CTID -- bash -lc "apt update && apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin"
-pct exec $CTID -- bash -lc "systemctl enable docker --now"
+pct exec "$CTID" -- bash -lc "apt update && apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin"
+pct exec "$CTID" -- bash -lc "systemctl enable docker --now"
 
-# 3. Setup Postiz stack
-pct exec $CTID -- bash -lc "mkdir -p /root/postiz && cd /root/postiz && \
+echo -e "${YELLOW}🚀 Deploying Postiz stack via Docker Compose...${RESET}"
+pct exec "$CTID" -- bash -lc "
+mkdir -p /root/postiz && cd /root/postiz
 cat > docker-compose.yml << 'EOF'
 version: '3.8'
 services:
@@ -108,11 +113,11 @@ volumes:
 networks:
   postiz-network:
 EOF
-cd /root/postiz && docker compose up -d"
+docker compose up -d
+"
 
-echo "✅ LXC container $CTID ($HOSTNAME) with Postiz is deploying. Visit: http://<LXC_IP>:5000 once setup completes."
-# Display final message with LXC IP and port
-LXC_IP=$(pct exec $CTID -- hostname -I | awk '{print $1}')
-echo -e "\n🎉✅ Postiz has been deployed in LXC container $CTID ($HOSTNAME)."
-echo -e "🔗 Access it at: http://$LXC_IP:5000"
-echo -e "🙏 Thank you for using peterxmadeits repo!"
+# 4️⃣ Display final message with actual IP
+LXC_IP=$(pct exec "$CTID" -- hostname -I | awk '{print $1}')
+echo -e "\n${GREEN}🎉✅ Postiz has been deployed in LXC container $CTID ($HOSTNAME).${RESET}"
+echo -e "${GREEN}🔗 Access it at: http://$LXC_IP:5000${RESET}"
+echo -e "${GREEN}🙏 Thank you for using Peterxmadeit's repo!${RESET}"
