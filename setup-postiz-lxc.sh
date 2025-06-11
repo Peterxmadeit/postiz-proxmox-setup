@@ -111,3 +111,8 @@ EOF
 cd /root/postiz && docker compose up -d"
 
 echo "✅ LXC container $CTID ($HOSTNAME) with Postiz is deploying. Visit: http://<LXC_IP>:5000 once setup completes."
+# Display final message with LXC IP and port
+LXC_IP=$(pct exec $CTID -- hostname -I | awk '{print $1}')
+echo -e "\n🎉✅ Postiz has been deployed in LXC container $CTID ($HOSTNAME)."
+echo -e "🔗 Access it at: http://$LXC_IP:5000"
+echo -e "🙏 Thank you for using peterxmadeits repo!"
