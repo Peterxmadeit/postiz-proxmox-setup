@@ -1,46 +1,44 @@
 #!/usr/bin/env bash
-# Postiz LXC Installer using community-scripts' build.func for reliable LXC setup
 
+# Exit on errors
 set -e
 trap 'echo -e "\n\033[1;31m❌ Error on line $LINENO. Exiting!\033[0m"; exit 1' ERR
 
-# Import the community functions
+# Import Proxmox community build functions:
 source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
 
-# LXC container settings
+# Metadata required by build.func
+APP="Postiz"
 var_ctid="${1:-}"
 var_hostname="${2:-}"
 var_os="ubuntu"
-var_os_version="24.04"
+var_version="24.04"
 var_disk="12"
 var_cpu="2"
 var_ram="4096"
 var_unprivileged="1"
 var_net="name=eth0,bridge=vmbr0,ip=dhcp"
+var_tags="postiz;scheduler"
 
-# Basic usage check
+# Validate usage
 if [[ -z "$var_ctid" || -z "$var_hostname" ]]; then
   echo -e "\033[1;31mUsage: $0 <CTID> <HOSTNAME>\033[0m"
   exit 1
 fi
 
-# Build LXC container using community helper
+# Run community build to setup the LXC container
 build_container
 
-# Post-deployment: install Docker & Postiz stack
-echo -e "\033[1;33m📦 Installing Docker & Docker Compose inside LXC...\033[0m"
-pct exec "$var_ctid" -- bash -c "apt update && apt install -y ca-certificates curl gnupg lsb-release"
-pct exec "$var_ctid" -- bash -c "mkdir -p /etc/apt/keyrings && \
-  curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg"
-pct exec "$var_ctid" -- bash -c "echo \
-  \"deb [arch=\$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
-  https://download.docker.com/linux/ubuntu \$(. /etc/os-release && echo \$UBUNTU_CODENAME) stable\" \
-  | tee /etc/apt/sources.list.d/docker.list > /dev/null"
-pct exec "$var_ctid" -- bash -c "apt update && apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin"
-pct exec "$var_ctid" -- bash -c "systemctl enable docker --now"
+# Now install Docker & Postiz inside the container:
+echo -e "\033[1;33m📦 Installing Docker & Docker Compose...\033[0m"
+pct exec "$var_ctid" -- bash -lc "apt update && apt install -y ca-certificates curl gnupg lsb-release"
+pct exec "$var_ctid" -- bash -lc "mkdir -p /etc/apt/keyrings && curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg"
+pct exec "$var_ctid" -- bash -lc "echo \"deb [arch=\$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \$(. /etc/os-release && echo \$UBUNTU_CODENAME) stable\" | tee /etc/apt/sources.list.d/docker.list"
+pct exec "$var_ctid" -- bash -lc "apt update && apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin"
+pct exec "$var_ctid" -- bash -lc "systemctl enable docker --now"
 
 echo -e "\033[1;33m🚀 Deploying Postiz stack via Docker Compose...\033[0m"
-pct exec "$var_ctid" -- bash -c "
+pct exec "$var_ctid" -- bash -lc "
 cd /root && mkdir -p postiz && cd postiz
 cat > docker-compose.yml << 'EOF'
 version: '3.8'
@@ -120,8 +118,8 @@ EOF
 docker compose up -d
 "
 
-# Final message
+# 🎉 Final Message
 LXC_IP=$(pct exec "$var_ctid" -- hostname -I | awk '{print $1}')
-echo -e "\n\033[1;32m🎉✅ Postiz has been deployed in LXC container $var_ctid ($var_hostname).\033[0m"
+echo -e "\n\033[1;32m🎉✅ Postiz is deployed in LXC $var_ctid ($var_hostname).\033[0m"
 echo -e "\033[1;32m🔗 Access it at: http://$LXC_IP:5000\033[0m"
-echo -e "\033[1;32m🙏 Thank you for using Peterxmadeit's repo!\033[0m"
+echo -e "\033[1;32m🙏 Thanks for using Peterxmadeit's repo!\033[0m"
